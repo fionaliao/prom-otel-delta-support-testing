@@ -1,12 +1,11 @@
 In prometheus repo:
+
 ```
 git checkout fionaliao/basic-delta-support
 
 make build
 
-./prometheus \
- --config.file=config/prometheus.yml \
- --web.enable-otlp-receiver
+ ./prometheus --web.enable-otlp-receiver --enable-feature=otlp-directdeltaingestion --config.file=config/testdata/otlp_allow_utf8.good.yml
 ```
 
 In this repo:
