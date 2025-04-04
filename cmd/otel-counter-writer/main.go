@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -14,6 +15,9 @@ import (
 )
 
 func main() {
+	// Set env variable to convert exponential histograms to Prometheus native histograms
+	os.Setenv("OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION", "base2_exponential_bucket_histogram")
+
 	ctx := context.Background()
 
 	delta, err := createMeterSetup(ctx, metricdata.DeltaTemporality)
@@ -33,11 +37,15 @@ func main() {
 		count++
 		delta.counter.Add(ctx, 1, metric.WithAttributes(delta.labels...))
 		cumulative.counter.Add(ctx, 1, metric.WithAttributes(cumulative.labels...))
+		delta.histogram.Record(ctx, float64(count%100), metric.WithAttributes(delta.labels...))
+		cumulative.histogram.Record(ctx, float64(count%100), metric.WithAttributes(cumulative.labels...))
 
 		// Only increment sparse counters every 20 iterations
 		if count%20 == 0 {
 			delta.sparseCounter.Add(ctx, 1, metric.WithAttributes(delta.labels...))
 			cumulative.sparseCounter.Add(ctx, 1, metric.WithAttributes(cumulative.labels...))
+			delta.sparseHistogram.Record(ctx, float64(count%100), metric.WithAttributes(delta.labels...))
+			cumulative.sparseHistogram.Record(ctx, float64(count%100), metric.WithAttributes(cumulative.labels...))
 			log.Printf("Added sparse metric values (count: %d)", count)
 		}
 
@@ -93,12 +101,30 @@ func createMeterSetup(ctx context.Context, temporality metricdata.Temporality) (
 		return nil, fmt.Errorf("failed to create sparse %s counter: %v", temporality.String(), err)
 	}
 
+	histogram, err := meter.Float64Histogram("test_histogram",
+		metric.WithDescription("Test "+temporality.String()+" histogram example"),
+		metric.WithUnit("1"))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s histogram: %v", temporality.String(), err)
+	}
+
+	sparseHistogram, err := meter.Float64Histogram("test_sparse_histogram",
+		metric.WithDescription("Test sparse "+temporality.String()+" histogram example"),
+		metric.WithUnit("1"))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sparse %s histogram: %v", temporality.String(), err)
+	}
+
 	return &meterSetup{
-		provider:      provider,
-		meter:         meter,
-		counter:       counter,
-		sparseCounter: sparseCounter,
-		labels:        createLabels(temporality.String()),
+		provider:        provider,
+		meter:           meter,
+		counter:         counter,
+		sparseCounter:   sparseCounter,
+		histogram:       histogram,
+		sparseHistogram: sparseHistogram,
+		labels:          createLabels(temporality.String()),
 	}, nil
 }
 
